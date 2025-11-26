@@ -11,4 +11,3 @@ services:
     environment:
       - "GF_AUTH_ANONYMOUS_ENABLED=true" 
 
-volumes:

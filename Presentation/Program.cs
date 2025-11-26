@@ -14,7 +14,6 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using NewRelic.LogEnrichers.Serilog;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Presentation.Middlewares;
@@ -32,16 +31,27 @@ builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddDbContext<EventStoreDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource.AddService(
-        serviceName: "PaymentService"))
-    .WithTracing(tracing => tracing
-        .AddAspNetCoreInstrumentation()
-        .AddAWSInstrumentation()    
-        .AddOtlpExporter(otlpOptions =>
-        {
-            otlpOptions.Endpoint = new Uri("http://localhost:4317");
-        }));
+    .WithTracing(tracing =>
+    {
+        tracing.AddSource("PaymentService")
+            .SetResourceBuilder(
+                ResourceBuilder.CreateDefault()
+                    .AddService(
+                        serviceName: builder.Configuration.GetSection("Serilog:Properties:ServiceName").Value ?? "PaymentService",
+                        serviceVersion: "1.0.0"))
+            .AddHttpClientInstrumentation()
+            .AddAspNetCoreInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation(options =>
+            {
+                options.SetDbStatementForText = true;
+            })
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317");
+            });
+    });
 
 
 Log.Logger = new LoggerConfiguration()

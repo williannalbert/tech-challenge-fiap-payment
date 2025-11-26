@@ -16,10 +16,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Context;
-using Serilog.Sinks.Elasticsearch;
 using Shared.DTOs.Commands;
 using System;
 using System.Text.Json;
@@ -210,6 +210,26 @@ public class Function
         services.AddScoped<IPurchaseRepository, EfPurchaseRepository>();
         services.AddScoped<IWalletApplicationService, WalletApplicationService>();
         services.AddScoped<ICommandPublisher, SqsCommandPublisher>();
+
+        services.AddOpenTelemetry()
+            .WithTracing(tracing =>
+            {
+                tracing.AddSource("PaymentService.Processor") 
+                    .SetResourceBuilder(
+                        ResourceBuilder.CreateDefault()
+                            .AddService(
+                                serviceName: configuration["ApplicationName"] ?? "PaymentService.Processor",
+                                serviceVersion: "1.0.0"))
+                    .AddEntityFrameworkCoreInstrumentation(options =>
+                    {
+                        options.SetDbStatementForText = true;
+                    })
+                    .AddAWSInstrumentation()
+                    .AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri(configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317");
+                    });
+            });
 
         services.AddScoped<IPurchaseApplicationService, PurchaseApplicationService>();
     }
