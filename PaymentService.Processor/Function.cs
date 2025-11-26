@@ -189,16 +189,6 @@ public class Function
         .Enrich.WithMachineName()
         .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
         .WriteTo.Console() 
-        .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(configuration["Elasticsearch:Uri"]))
-        {
-            IndexFormat = "fcg-logs-{0:yyyy.MM.dd}",
-            TypeName = null,
-            AutoRegisterTemplate = true,
-            ModifyConnectionSettings = x => x.ApiKeyAuthentication(
-                configuration["Elasticsearch:Id"],
-                configuration["Elasticsearch:ApiKey"]
-            )
-        })
         .CreateLogger();
 
         services.AddLogging(builder =>

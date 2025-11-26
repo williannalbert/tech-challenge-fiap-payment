@@ -1,31 +1,14 @@
 version: '3.8'
 services:
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.2
-    container_name: payment-elasticsearch
-    environment:
-      - "discovery.type=single-node"
-      - "xpack.security.enabled=false" 
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest 
+    container_name: payment-otel-lgtm
     ports:
-      - "9200:9200"
+      - "3000:3000" 
+      - "4317:4317" 
     volumes:
-      - esdata:/usr/share/elasticsearch/data
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.9.2
-    container_name: payment-kibana
-    ports:
-      - "5601:5601"
+      - lgtm-data:/opt/lgtm/data 
     environment:
-      - "ELASTICSEARCH_HOSTS=http://elasticsearch:9200" 
-    depends_on:
-      - elasticsearch
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: payment-jaeger
-    ports:
-      - "16686:16686"
-      - "4317:4317"
- 
+      - "GF_AUTH_ANONYMOUS_ENABLED=true" 
+
 volumes:
-  esdata:

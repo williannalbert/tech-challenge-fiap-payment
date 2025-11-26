@@ -19,8 +19,6 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Presentation.Middlewares;
 using Serilog;
-using Serilog.Enrichers.CorrelationId;
-using Serilog.Sinks.Elasticsearch;
 using System.Collections.Specialized;
 using System.Text;
 using System.Text.Json;
@@ -61,22 +59,6 @@ builder.Host.UseSerilog(
             .Enrich.WithMachineName()
             .Enrich.WithProperty("X-Correlation-ID", context.HostingEnvironment.ApplicationName)
             .WriteTo.Console()
-            .WriteTo.Elasticsearch(
-                new ElasticsearchSinkOptions(new Uri(context.Configuration["Elasticsearch:Uri"]))
-                {
-                    IndexFormat = "fcg-logs-{0:yyyy.MM.dd}",
-                    TypeName = null,
-                    AutoRegisterTemplate = true,
-                    OverwriteTemplate = true,
-                    NumberOfShards = 1,
-                    NumberOfReplicas = 1,
-                    ModifyConnectionSettings = x =>
-                        x.ApiKeyAuthentication(
-                            context.Configuration["Elasticsearch:Id"],
-                            context.Configuration["Elasticsearch:ApiKey"]
-                        ),
-                }
-            )
         );
 
 builder.Services.AddControllers();

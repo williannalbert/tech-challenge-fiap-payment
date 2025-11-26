@@ -9,9 +9,6 @@ data:
   ASPNETCORE_URLS: "http://*:80"
   DOTNET_RUNNING_IN_CONTAINER: "true"
   
-  # Elasticsearch Configuration
-  Elasticsearch__Uri: "https://my-elasticsearch-project-ba9d4e.es.us-central1.gcp.elastic.cloud"
-  Elasticsearch__Id: "my-elasticsearch-project-ba9d4e"
   
   # AWS SQS/SNS Configuration
   AWS__Region: "sa-east-1"
@@ -25,8 +22,6 @@ data:
   
   # Serilog Configuration
   Serilog__Using__0: "Serilog.Sinks.Console"
-  Serilog__Using__1: "Serilog.Sinks.Elasticsearch"
-  Serilog__Using__2: "NewRelic.LogEnrichers.Serilog"
   Serilog__MinimumLevel__Default: "Information"
   Serilog__MinimumLevel__Override__Microsoft: "Warning"
   Serilog__MinimumLevel__Override__System: "Warning"
@@ -34,13 +29,10 @@ data:
   Serilog__Properties__ServiceName: "fcg-payment-service"
   Serilog__Enrich__0: "FromLogContext"
   Serilog__Enrich__1: "WithMachineName"
-  Serilog__Enrich__2: "WithNewRelicLogsInContext"
   Serilog__WriteTo__0__Name: "Console"
   Serilog__WriteTo__1__Name: "Elasticsearch"
-  Serilog__WriteTo__1__Args__nodeUris: "https://my-elasticsearch-project-ba9d4e.es.us-central1.gcp.elastic.cloud"
-  Serilog__WriteTo__1__Args__indexFormat: "fcg-payment-logs-{0:yyyy.MM.dd}"
-  Serilog__WriteTo__1__Args__autoRegisterTemplate: "true"
-  Serilog__WriteTo__1__Args__typeName: ""
+
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-svc:4317"
   
   # Health Check Configuration
   HEALTHCHECKS_UI_ENABLED: "true"
