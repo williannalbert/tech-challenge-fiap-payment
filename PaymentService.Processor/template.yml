@@ -83,7 +83,6 @@ Resources:
 
 
           Serilog__Using__0: "Serilog.Sinks.Console"
-          Serilog__Using__1: "Serilog.Sinks.Elasticsearch"
           Serilog__Using__2: "Serilog.Enrichers.Environment"
           Serilog__Using__3: "Serilog.Enrichers.Thread"
           
@@ -91,10 +90,12 @@ Resources:
           Serilog__MinimumLevel__Override__Microsoft: "Warning"
 
           Serilog__WriteTo__0__Name: "Console"
-          Serilog__WriteTo__1__Args__autoRegisterTemplate: "true"
 
           APPLICATION_NAME: "PaymentService.Processor" # Nome estático da aplicação
 
           Serilog__Enrich__0: "FromLogContext"
           Serilog__Enrich__1: "WithMachineName"
           Serilog__Enrich__2: "WithThreadId"
+
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-svc:4317"
+

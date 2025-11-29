@@ -85,7 +85,6 @@ jobs:
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secrets.yaml
-          kubectl apply -f k8s/newrelic-secrets.yaml
           kubectl apply -f k8s/kong-plugins.yaml
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml
@@ -160,8 +159,6 @@ jobs:
               ParameterKey=WalletQueueArn,ParameterValue=${{ secrets.WALLET_QUEUE_ARN }} \
               ParameterKey=PurchaseQueueArn,ParameterValue=${{ secrets.PURCHASE_QUEUE_ARN }} \
               ParameterKey=ReplyQueueName,ParameterValue=${{ secrets.REPLY_QUEUE_NAME }} \
-              ParameterKey=ElasticUrl,ParameterValue=${{ secrets.ELASTIC_URL }} \
-              ParameterKey=ElasticId,ParameterValue=${{ secrets.ELASTIC_ID }} \
-              ParameterKey=ElasticApiKey,ParameterValue=${{ secrets.ELASTIC_API_KEY }}
+
         
           echo "🚀 Lambda Payment Processor deploy concluído!"

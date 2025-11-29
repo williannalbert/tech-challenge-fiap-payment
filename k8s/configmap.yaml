@@ -30,7 +30,6 @@ data:
   Serilog__Enrich__0: "FromLogContext"
   Serilog__Enrich__1: "WithMachineName"
   Serilog__WriteTo__0__Name: "Console"
-  Serilog__WriteTo__1__Name: "Elasticsearch"
 
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-svc:4317"
   
