@@ -178,7 +178,10 @@ public class Function
     private void ConfigureServices(IServiceCollection services)
     {
         var configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
+            .SetBasePath(Directory.GetCurrentDirectory()) 
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true) 
+            .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development"}.json", optional: true)
+            .AddEnvironmentVariables() 
             .Build();
 
         services.AddSingleton<IConfiguration>(configuration);
