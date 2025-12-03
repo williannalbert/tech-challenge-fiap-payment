@@ -15,12 +15,6 @@ Parameters:
   SnsTopicArn:
     Type: String
     Description: O ARN do tópico SNS para publicar eventos.
-  WalletQueueArn:
-    Type: String
-    Description: O ARN da fila SQS de comandos da carteira.
-  PurchaseQueueArn:
-    Type: String
-    Description: O ARN da fila SQS de comandos de compra.
   ReplyQueueName:
     Type: String
     Description: O nome da fila SQS para respostas RPC.
@@ -42,6 +36,31 @@ Globals:
     MemorySize: 512 
 
 Resources:
+  WalletDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: wallet-queue-dlq
+
+  WalletQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: wallet-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt WalletDLQ.Arn
+        maxReceiveCount: 3
+
+  PurchaseDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: purchase-queue-dlq
+
+  PurchaseQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: purchase-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PurchaseDLQ.Arn
+        maxReceiveCount: 3
   PaymentProcessorFunction:
     Type: AWS::Serverless::Function 
     Properties:
@@ -53,22 +72,22 @@ Resources:
         WalletQueueTrigger:
           Type: SQS
           Properties:
-            Queue: !Ref WalletQueueArn 
+            Queue: !GetAtt WalletQueue.Arn
             BatchSize: 10 
             Enabled: true
 
         PurchaseQueueTrigger:
           Type: SQS
           Properties:
-            Queue: !Ref PurchaseQueueArn 
+            Queue: !GetAtt PurchaseQueue.Arn
             BatchSize: 10
             Enabled: true
       
       Policies:
         - SQSPollerPolicy:
-            QueueName: wallet-queue 
+            QueueName: !GetAtt WalletQueue.QueueName
         - SQSPollerPolicy:
-            QueueName: purchase-queue 
+            QueueName: !GetAtt PurchaseQueue.QueueName
             
         - SNSPublishMessagePolicy:
             TopicName: payment-topic 
@@ -79,7 +98,7 @@ Resources:
               Action:
                 - "sqs:SendMessage"
                 - "sqs:GetQueueUrl"
-              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:catalog-events-queue"
+              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${ReplyQueueName}"
          
         - VPCAccessPolicy: {}
   
@@ -88,8 +107,8 @@ Resources:
           ConnectionStrings__DefaultConnection: !Sub "Host=${RdsHost};Port=5432;Database=postgres;Username=postgres;Password=${RdsPassword}"
           AWS__Region: "sa-east-1"
           AWS__SnsTopicArn: !Ref SnsTopicArn
-          AWS__WalletCommandQueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/${WalletQueueArn}" 
-          AWS__PurchaseCommandQueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/${PurchaseQueueArn}"
+          AWS__WalletCommandQueueUrl: !Ref WalletQueue
+          AWS__PurchaseCommandQueueUrl: !Ref PurchaseQueue
           AWS__ReplyQueueName: !Ref ReplyQueueName
 
 

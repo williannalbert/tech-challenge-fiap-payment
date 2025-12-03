@@ -17,6 +17,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Trace;
+using PaymentService.Processor.Configuration;
 using Serilog;
 using Serilog.Context;
 using Serilog.Sinks.Elasticsearch;
@@ -103,37 +104,42 @@ public class Function
                 return;
             }
             object? result = null;
-            switch (commandType)
-            {
-                case "create-deposit":
-                    var walletService = serviceProvider.GetRequiredService<IWalletApplicationService>();
-                    var depositCmd = JsonSerializer.Deserialize<CreateDepositCommand>(payload, options);
-                    if (depositCmd != null)
-                        result = await walletService.CreateDepositAsync(depositCmd);
-                    break;
-                case "create-withdraw":
-                    var walletServiceWithdraw = serviceProvider.GetRequiredService<IWalletApplicationService>();
-                    var withdrawCmd = JsonSerializer.Deserialize<CreateWithdrawalCommand>(payload, options);
-                    if (withdrawCmd != null)
-                        result = await walletServiceWithdraw.CreateWithdrawalAsync(withdrawCmd);
-                    break;
-                case "create-purchase":
-                    var purchaseService = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
-                    var purchaseCmd = JsonSerializer.Deserialize<CreatePurchaseCommand>(payload, options);
-                    if (purchaseCmd != null)
-                        result = await purchaseService.CreatePurchaseAsync(purchaseCmd);
-                    break;
-                case "create-refund":
-                    var purchaseServiceRefund = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
-                    var refundCmd = JsonSerializer.Deserialize<CreateRefundCommand>(payload, options);
-                    if (refundCmd != null)
-                        result = await purchaseServiceRefund.CreateRefundAsync(refundCmd);
-                    break;
-                default:
-                    _logger.LogWarning($"Unsupported command type '{commandType}'. Message will be discarded.");
-                    break;
-            }
+            var policy = ResiliencePolicy.GetPostgresPolicy(_logger);
 
+            await policy.ExecuteAsync(async () =>
+            {
+                switch (commandType)
+                {
+                    case "create-deposit":
+                        var walletService = serviceProvider.GetRequiredService<IWalletApplicationService>();
+                        var depositCmd = JsonSerializer.Deserialize<CreateDepositCommand>(payload, options);
+                        if (depositCmd != null)
+                            result = await walletService.CreateDepositAsync(depositCmd);
+                        break;
+                    case "create-withdraw":
+                        var walletServiceWithdraw = serviceProvider.GetRequiredService<IWalletApplicationService>();
+                        var withdrawCmd = JsonSerializer.Deserialize<CreateWithdrawalCommand>(payload, options);
+                        if (withdrawCmd != null)
+                            result = await walletServiceWithdraw.CreateWithdrawalAsync(withdrawCmd);
+                        break;
+                    case "create-purchase":
+                        var purchaseService = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
+                        var purchaseCmd = JsonSerializer.Deserialize<CreatePurchaseCommand>(payload, options);
+                        if (purchaseCmd != null)
+                            result = await purchaseService.CreatePurchaseAsync(purchaseCmd);
+                        break;
+                    case "create-refund":
+                        var purchaseServiceRefund = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
+                        var refundCmd = JsonSerializer.Deserialize<CreateRefundCommand>(payload, options);
+                        if (refundCmd != null)
+                            result = await purchaseServiceRefund.CreateRefundAsync(refundCmd);
+                        break;
+                    default:
+                        _logger.LogWarning($"Unsupported command type '{commandType}'. Message will be discarded.");
+                        break;
+                }
+            });
+            
             if (result != null && (commandType == "create-purchase" || commandType == "create-refund"))
             {
                 var sqsClient = serviceProvider.GetRequiredService<IAmazonSQS>();
