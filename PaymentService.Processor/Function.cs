@@ -20,7 +20,7 @@ using OpenTelemetry.Trace;
 using PaymentService.Processor.Configuration;
 using Serilog;
 using Serilog.Context;
-using Serilog.Sinks.Elasticsearch;
+using Serilog.Sinks.Grafana.Loki;
 using Shared.DTOs.Commands;
 using System;
 using System.Text.Json;
@@ -191,23 +191,17 @@ public class Function
             .Build();
 
         services.AddSingleton<IConfiguration>(configuration);
-
+        var lokiUrl = configuration["Loki:Uri"] ?? "http://localhost:3100";
         var logger = new LoggerConfiguration()
         .ReadFrom.Configuration(configuration)
         .Enrich.FromLogContext() 
         .Enrich.WithMachineName()
         .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
-        .WriteTo.Console() 
-        .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(configuration["Elasticsearch:Uri"]))
-        {
-            IndexFormat = "fcg-logs-{0:yyyy.MM.dd}",
-            TypeName = null,
-            AutoRegisterTemplate = true,
-            ModifyConnectionSettings = x => x.ApiKeyAuthentication(
-                configuration["Elasticsearch:Id"],
-                configuration["Elasticsearch:ApiKey"]
-            )
-        })
+        .WriteTo.Console()
+        .WriteTo.GrafanaLoki(
+            lokiUrl,
+            labels: new[] { new LokiLabel { Key = "app", Value = "payment-processor" } }
+        )
         .CreateLogger();
 
         services.AddLogging(builder =>
