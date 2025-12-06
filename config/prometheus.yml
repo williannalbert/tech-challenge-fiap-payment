@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s # Puxa métricas a cada 5s (rápido para testes)
+
+scrape_configs:
+  - job_name: 'payment-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:5072']
+      # - targets: ['presentation:80'] 

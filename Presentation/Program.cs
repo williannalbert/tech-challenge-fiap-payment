@@ -7,22 +7,17 @@ using Application.Services;
 using Domain.Interfaces.Repositories;
 using Infrastructure.Data.EventSourcing;
 using Infrastructure.Data.Repositories;
-using Infrastructure.Logging;
 using Infrastructure.MessageBus;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using NewRelic.LogEnrichers.Serilog;
+using Npgsql;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Presentation.Middlewares;
 using Serilog;
-using Serilog.Enrichers.CorrelationId;
 using Serilog.Sinks.Grafana.Loki;
-using System.Collections.Specialized;
-using System.Text;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,11 +34,19 @@ builder.Services.AddOpenTelemetry()
         serviceName: "PaymentService"))
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
-        .AddAWSInstrumentation()    
+        .AddHttpClientInstrumentation()
+        .AddAWSInstrumentation()
+        .AddNpgsql()
+        .AddEntityFrameworkCoreInstrumentation()
         .AddOtlpExporter(otlpOptions =>
         {
             otlpOptions.Endpoint = new Uri("http://localhost:4317");
-        }));
+        }))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddPrometheusExporter() 
+    );
 
 
 Log.Logger = new LoggerConfiguration()
@@ -153,5 +156,7 @@ app.MapHealthChecks("/health", new HealthCheckOptions
         );
     },
 });
+
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.Run();

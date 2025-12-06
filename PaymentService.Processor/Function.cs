@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using PaymentService.Processor.Configuration;
 using Serilog;
@@ -193,22 +194,33 @@ public class Function
         services.AddSingleton<IConfiguration>(configuration);
         var lokiUrl = configuration["Loki:Uri"] ?? "http://localhost:3100";
         var logger = new LoggerConfiguration()
-        .ReadFrom.Configuration(configuration)
-        .Enrich.FromLogContext() 
-        .Enrich.WithMachineName()
-        .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
-        .WriteTo.Console()
-        .WriteTo.GrafanaLoki(
-            lokiUrl,
-            labels: new[] { new LokiLabel { Key = "app", Value = "payment-processor" } }
-        )
-        .CreateLogger();
+            .ReadFrom.Configuration(configuration)
+            .Enrich.FromLogContext() 
+            .Enrich.WithMachineName()
+            .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
+            .WriteTo.Console()
+            .WriteTo.GrafanaLoki(
+                lokiUrl,
+                labels: new[] { new LokiLabel { Key = "app", Value = "payment-processor" } }
+            )
+            .CreateLogger();
 
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
             builder.AddSerilog(logger, dispose: true);
         });
+
+        services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService("PaymentService.Processor"))
+        .WithTracing(tracing => tracing
+            .AddAWSInstrumentation() 
+            .AddEntityFrameworkCoreInstrumentation() 
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri(configuration["Otlp:Endpoint"] ?? "http://localhost:4317");
+            }));
 
         services.AddDbContext<EventStoreDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
