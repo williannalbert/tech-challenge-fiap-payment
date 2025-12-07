@@ -19,8 +19,10 @@ spec:
     spec:
       containers:
       - name: payment-api
-        image: 208452488125.dkr.ecr.sa-east-1.amazonaws.com/payment-service-api:latest
-        imagePullPolicy: Always
+        # image: 208452488125.dkr.ecr.sa-east-1.amazonaws.com/payment-service-api:latest
+        image: payment-service-api:latest
+        # imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
           name: http

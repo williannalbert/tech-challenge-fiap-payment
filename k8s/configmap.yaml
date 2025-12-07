@@ -13,8 +13,10 @@ data:
   # AWS SQS/SNS Configuration
   AWS__Region: "sa-east-1"
   AWS__SnsTopicArn: "arn:aws:sns:sa-east-1:208452488125:payment-topic"
-  AWS__WalletCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/wallet-queue"
-  AWS__PurchaseCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/purchase-queue"
+  # AWS__WalletCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/wallet-queue"
+  # AWS__PurchaseCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/purchase-queue"
+  AWS__WalletCommandQueueUrl: "http://host.docker.internal:4566/000000000000/wallet-queue"
+  AWS__PurchaseCommandQueueUrl: "http://host.docker.internal:4566/000000000000/purchase-queue"
   AWS__ReplyQueueName: "catalog-events-queue"
   
   # JWT Configuration
@@ -31,8 +33,10 @@ data:
   Serilog__Enrich__1: "WithMachineName"
   Serilog__WriteTo__0__Name: "Console"
 
+  # Loki__Uri: "http://loki-stack.monitoring:3100"
+  # Otlp__Endpoint: "http://tempo.monitoring:4317"
+
   Loki__Uri: "http://loki-stack.monitoring:3100"
-  
   Otlp__Endpoint: "http://tempo.monitoring:4317"
   
   # Health Check Configuration
