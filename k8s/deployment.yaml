@@ -24,7 +24,7 @@ spec:
         # imagePullPolicy: Always
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 80
+        - containerPort: 8080
           name: http
         envFrom:
         - configMapRef:
@@ -42,7 +42,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           successThreshold: 1
@@ -50,7 +50,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
           successThreshold: 1
