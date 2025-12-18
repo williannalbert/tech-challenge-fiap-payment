@@ -123,7 +123,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("AllowAllOrigins");
-app.UseMiddleware<JwtMiddleware>();
+app.UseMiddleware<LogContextMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
