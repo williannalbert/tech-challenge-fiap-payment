@@ -23,6 +23,9 @@ using System.Text.Json;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var otlpEndpoint = builder.Configuration["Otlp__Endpoint"] ?? "http://localhost:4317";
+var lokiUri = builder.Configuration["Loki__Uri"] ?? "http://localhost:3100";
+
 var awsOptions = builder.Configuration.GetAWSOptions();
 builder.Services.AddDefaultAWSOptions(awsOptions);
 
@@ -40,7 +43,7 @@ builder.Services.AddOpenTelemetry()
         .AddEntityFrameworkCoreInstrumentation()
         .AddOtlpExporter(otlpOptions =>
         {
-            otlpOptions.Endpoint = new Uri("http://localhost:4317");
+            otlpOptions.Endpoint = new Uri(otlpEndpoint);
         }))
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
@@ -65,7 +68,7 @@ builder.Host.UseSerilog(
             .Enrich.WithProperty("X-Correlation-ID", context.HostingEnvironment.ApplicationName)
             .WriteTo.Console()
             .WriteTo.GrafanaLoki(
-                "http://localhost:3100",
+                lokiUri,
                 labels: new[] { new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "app", Value = "payment-api" } }
             )
         );
