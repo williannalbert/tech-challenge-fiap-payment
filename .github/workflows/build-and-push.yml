@@ -10,7 +10,7 @@ on:
 env:
   AWS_REGION: sa-east-1
   ECR_REPOSITORY: payment-service-api
-  EKS_CLUSTER_NAME: fcg-identity
+  EKS_CLUSTER_NAME: fcg-identity-cluster
   SAM_S3_BUCKET: ${{ secrets.SAM_S3_BUCKET }}
 
 jobs:
@@ -85,11 +85,11 @@ jobs:
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secrets.yaml
-          kubectl apply -f k8s/newrelic-secrets.yaml
           kubectl apply -f k8s/kong-plugins.yaml
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml
           kubectl apply -f k8s/ingress.yaml
+          kubectl apply -f k8s/hpa.yaml
 
       - name: Verify Deployment
         run: |

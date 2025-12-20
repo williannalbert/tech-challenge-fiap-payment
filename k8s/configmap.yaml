@@ -6,21 +6,19 @@ metadata:
 data:
   # ASP.NET Core Configuration
   ASPNETCORE_ENVIRONMENT: "Production"
-  ASPNETCORE_URLS: "http://*:80"
+  ASPNETCORE_URLS: "http://*:8080"
   DOTNET_RUNNING_IN_CONTAINER: "true"
   
   
   # AWS SQS/SNS Configuration
   AWS__Region: "sa-east-1"
   AWS__SnsTopicArn: "arn:aws:sns:sa-east-1:208452488125:payment-topic"
-  # AWS__WalletCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/wallet-queue"
-  # AWS__PurchaseCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/purchase-queue"
-  AWS__WalletCommandQueueUrl: "http://host.docker.internal:4566/000000000000/wallet-queue"
-  AWS__PurchaseCommandQueueUrl: "http://host.docker.internal:4566/000000000000/purchase-queue"
+  AWS__WalletCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/wallet-queue"
+  AWS__PurchaseCommandQueueUrl: "https://sqs.sa-east-1.amazonaws.com/208452488125/purchase-queue"
   AWS__ReplyQueueName: "catalog-events-queue"
   
   # JWT Configuration
-  Jwt__Issuer: "http://keycloak-service:8080/realms/fiap-cloud-games"
+  Jwt__Issuer: "http://keycloak-service.identity-system:8080/realms/fiap-cloud-games"
   
   # Serilog Configuration
   Serilog__Using__0: "Serilog.Sinks.Console"
@@ -32,12 +30,13 @@ data:
   Serilog__Enrich__0: "FromLogContext"
   Serilog__Enrich__1: "WithMachineName"
   Serilog__WriteTo__0__Name: "Console"
+  Serilog__WriteTo__1__Args__endpoint: "http://otel-collector.identity-system.svc.cluster.local:4317/"
 
   # Loki__Uri: "http://loki-stack.monitoring:3100"
   # Otlp__Endpoint: "http://tempo.monitoring:4317"
 
-  Loki__Uri: "http://loki-stack.monitoring:3100"
-  Otlp__Endpoint: "http://tempo.monitoring:4317"
+  Loki__Uri: "http://loki.identity-system:3100"
+  Otlp__Endpoint: "http://otel-collector-service.identity-system:4317"
   
   # Health Check Configuration
   HEALTHCHECKS_UI_ENABLED: "true"
