@@ -18,7 +18,7 @@ RUN dotnet restore "TechChallengeFIAP.Payment.sln"
 
 COPY . .
 
-RUN dotnet publish Presentation/Presentation.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
+RUN dotnet publish Presentation/Presentation.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}-alpine AS final
 WORKDIR /app
