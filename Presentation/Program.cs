@@ -7,27 +7,25 @@ using Application.Services;
 using Domain.Interfaces.Repositories;
 using Infrastructure.Data.EventSourcing;
 using Infrastructure.Data.Repositories;
-using Infrastructure.Logging;
 using Infrastructure.MessageBus;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using NewRelic.LogEnrichers.Serilog;
+using Npgsql;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Presentation.Middlewares;
 using Serilog;
-using Serilog.Enrichers.CorrelationId;
-using Serilog.Sinks.Elasticsearch;
-using System.Collections.Specialized;
-using System.Text;
+using Serilog.Sinks.Grafana.Loki;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var otlpEndpoint = builder.Configuration["Otlp__Endpoint"] ?? "http://localhost:4317";
+var lokiUri = builder.Configuration["Loki__Uri"] ?? "http://localhost:3100";
+
 var awsOptions = builder.Configuration.GetAWSOptions();
 builder.Services.AddDefaultAWSOptions(awsOptions);
 
@@ -39,11 +37,19 @@ builder.Services.AddOpenTelemetry()
         serviceName: "PaymentService"))
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
-        .AddAWSInstrumentation()    
+        .AddHttpClientInstrumentation()
+        .AddAWSInstrumentation()
+        .AddNpgsql()
+        .AddEntityFrameworkCoreInstrumentation()
         .AddOtlpExporter(otlpOptions =>
         {
-            otlpOptions.Endpoint = new Uri("http://localhost:4317");
-        }));
+            otlpOptions.Endpoint = new Uri(otlpEndpoint);
+        }))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddPrometheusExporter() 
+    );
 
 
 Log.Logger = new LoggerConfiguration()
@@ -61,21 +67,9 @@ builder.Host.UseSerilog(
             .Enrich.WithMachineName()
             .Enrich.WithProperty("X-Correlation-ID", context.HostingEnvironment.ApplicationName)
             .WriteTo.Console()
-            .WriteTo.Elasticsearch(
-                new ElasticsearchSinkOptions(new Uri(context.Configuration["Elasticsearch:Uri"]))
-                {
-                    IndexFormat = "fcg-logs-{0:yyyy.MM.dd}",
-                    TypeName = null,
-                    AutoRegisterTemplate = true,
-                    OverwriteTemplate = true,
-                    NumberOfShards = 1,
-                    NumberOfReplicas = 1,
-                    ModifyConnectionSettings = x =>
-                        x.ApiKeyAuthentication(
-                            context.Configuration["Elasticsearch:Id"],
-                            context.Configuration["Elasticsearch:ApiKey"]
-                        ),
-                }
+            .WriteTo.GrafanaLoki(
+                lokiUri,
+                labels: new[] { new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "app", Value = "payment-api" } }
             )
         );
 
@@ -132,7 +126,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("AllowAllOrigins");
-app.UseMiddleware<JwtMiddleware>();
+app.UseMiddleware<LogContextMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -165,5 +159,7 @@ app.MapHealthChecks("/health", new HealthCheckOptions
         );
     },
 });
+
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.Run();

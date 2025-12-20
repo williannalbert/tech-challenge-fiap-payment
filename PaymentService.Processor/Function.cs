@@ -16,10 +16,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using PaymentService.Processor.Configuration;
 using Serilog;
 using Serilog.Context;
-using Serilog.Sinks.Elasticsearch;
+using Serilog.Sinks.Grafana.Loki;
 using Shared.DTOs.Commands;
 using System;
 using System.Text.Json;
@@ -103,37 +105,42 @@ public class Function
                 return;
             }
             object? result = null;
-            switch (commandType)
-            {
-                case "create-deposit":
-                    var walletService = serviceProvider.GetRequiredService<IWalletApplicationService>();
-                    var depositCmd = JsonSerializer.Deserialize<CreateDepositCommand>(payload, options);
-                    if (depositCmd != null)
-                        result = await walletService.CreateDepositAsync(depositCmd);
-                    break;
-                case "create-withdraw":
-                    var walletServiceWithdraw = serviceProvider.GetRequiredService<IWalletApplicationService>();
-                    var withdrawCmd = JsonSerializer.Deserialize<CreateWithdrawalCommand>(payload, options);
-                    if (withdrawCmd != null)
-                        result = await walletServiceWithdraw.CreateWithdrawalAsync(withdrawCmd);
-                    break;
-                case "create-purchase":
-                    var purchaseService = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
-                    var purchaseCmd = JsonSerializer.Deserialize<CreatePurchaseCommand>(payload, options);
-                    if (purchaseCmd != null)
-                        result = await purchaseService.CreatePurchaseAsync(purchaseCmd);
-                    break;
-                case "create-refund":
-                    var purchaseServiceRefund = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
-                    var refundCmd = JsonSerializer.Deserialize<CreateRefundCommand>(payload, options);
-                    if (refundCmd != null)
-                        result = await purchaseServiceRefund.CreateRefundAsync(refundCmd);
-                    break;
-                default:
-                    _logger.LogWarning($"Unsupported command type '{commandType}'. Message will be discarded.");
-                    break;
-            }
+            var policy = ResiliencePolicy.GetPostgresPolicy(_logger);
 
+            await policy.ExecuteAsync(async () =>
+            {
+                switch (commandType)
+                {
+                    case "create-deposit":
+                        var walletService = serviceProvider.GetRequiredService<IWalletApplicationService>();
+                        var depositCmd = JsonSerializer.Deserialize<CreateDepositCommand>(payload, options);
+                        if (depositCmd != null)
+                            result = await walletService.CreateDepositAsync(depositCmd);
+                        break;
+                    case "create-withdraw":
+                        var walletServiceWithdraw = serviceProvider.GetRequiredService<IWalletApplicationService>();
+                        var withdrawCmd = JsonSerializer.Deserialize<CreateWithdrawalCommand>(payload, options);
+                        if (withdrawCmd != null)
+                            result = await walletServiceWithdraw.CreateWithdrawalAsync(withdrawCmd);
+                        break;
+                    case "create-purchase":
+                        var purchaseService = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
+                        var purchaseCmd = JsonSerializer.Deserialize<CreatePurchaseCommand>(payload, options);
+                        if (purchaseCmd != null)
+                            result = await purchaseService.CreatePurchaseAsync(purchaseCmd);
+                        break;
+                    case "create-refund":
+                        var purchaseServiceRefund = serviceProvider.GetRequiredService<IPurchaseApplicationService>();
+                        var refundCmd = JsonSerializer.Deserialize<CreateRefundCommand>(payload, options);
+                        if (refundCmd != null)
+                            result = await purchaseServiceRefund.CreateRefundAsync(refundCmd);
+                        break;
+                    default:
+                        _logger.LogWarning($"Unsupported command type '{commandType}'. Message will be discarded.");
+                        break;
+                }
+            });
+            
             if (result != null && (commandType == "create-purchase" || commandType == "create-refund"))
             {
                 var sqsClient = serviceProvider.GetRequiredService<IAmazonSQS>();
@@ -178,34 +185,42 @@ public class Function
     private void ConfigureServices(IServiceCollection services)
     {
         var configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
+            .SetBasePath(Directory.GetCurrentDirectory()) 
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true) 
+            .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development"}.json", optional: true)
+            .AddEnvironmentVariables() 
             .Build();
 
         services.AddSingleton<IConfiguration>(configuration);
-
+        var lokiUrl = configuration["Loki:Uri"] ?? "http://localhost:3100";
         var logger = new LoggerConfiguration()
-        .ReadFrom.Configuration(configuration)
-        .Enrich.FromLogContext() 
-        .Enrich.WithMachineName()
-        .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
-        .WriteTo.Console() 
-        .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(configuration["Elasticsearch:Uri"]))
-        {
-            IndexFormat = "fcg-logs-{0:yyyy.MM.dd}",
-            TypeName = null,
-            AutoRegisterTemplate = true,
-            ModifyConnectionSettings = x => x.ApiKeyAuthentication(
-                configuration["Elasticsearch:Id"],
-                configuration["Elasticsearch:ApiKey"]
+            .ReadFrom.Configuration(configuration)
+            .Enrich.FromLogContext() 
+            .Enrich.WithMachineName()
+            .Enrich.WithProperty("ApplicationName", configuration["APPLICATION_NAME"] ?? "PaymentService.Processor")
+            .WriteTo.Console()
+            .WriteTo.GrafanaLoki(
+                lokiUrl,
+                labels: new[] { new LokiLabel { Key = "app", Value = "payment-processor" } }
             )
-        })
-        .CreateLogger();
+            .CreateLogger();
 
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
             builder.AddSerilog(logger, dispose: true);
         });
+
+        services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService("PaymentService.Processor"))
+        .WithTracing(tracing => tracing
+            .AddAWSInstrumentation() 
+            .AddEntityFrameworkCoreInstrumentation() 
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri(configuration["Otlp:Endpoint"] ?? "http://localhost:4317");
+            }));
 
         services.AddDbContext<EventStoreDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));

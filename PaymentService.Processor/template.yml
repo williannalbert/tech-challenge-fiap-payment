@@ -15,26 +15,13 @@ Parameters:
   SnsTopicArn:
     Type: String
     Description: O ARN do tópico SNS para publicar eventos.
-  WalletQueueArn:
-    Type: String
-    Description: O ARN da fila SQS de comandos da carteira.
-  PurchaseQueueArn:
-    Type: String
-    Description: O ARN da fila SQS de comandos de compra.
   ReplyQueueName:
     Type: String
     Description: O nome da fila SQS para respostas RPC.
-  ElasticUrl:
+  LokiUrl:
     Type: String
-    Description: URL do cluster Elasticsearch.
-  ElasticId: 
-    Type: String
-    Description: O ID da API Key do Elasticsearch.
-    NoEcho: true
-  ElasticApiKey:
-    Type: String
-    Description: Chave de API do Elasticsearch.
-    NoEcho: true
+    Description: URL do cluster Loki.
+
 
 Globals:
   Function:
@@ -42,6 +29,31 @@ Globals:
     MemorySize: 512 
 
 Resources:
+  WalletDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: wallet-queue-dlq
+
+  WalletQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: wallet-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt WalletDLQ.Arn
+        maxReceiveCount: 3
+
+  PurchaseDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: purchase-queue-dlq
+
+  PurchaseQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: purchase-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PurchaseDLQ.Arn
+        maxReceiveCount: 3
   PaymentProcessorFunction:
     Type: AWS::Serverless::Function 
     Properties:
@@ -53,22 +65,22 @@ Resources:
         WalletQueueTrigger:
           Type: SQS
           Properties:
-            Queue: !Ref WalletQueueArn 
+            Queue: !GetAtt WalletQueue.Arn
             BatchSize: 10 
             Enabled: true
 
         PurchaseQueueTrigger:
           Type: SQS
           Properties:
-            Queue: !Ref PurchaseQueueArn 
+            Queue: !GetAtt PurchaseQueue.Arn
             BatchSize: 10
             Enabled: true
       
       Policies:
         - SQSPollerPolicy:
-            QueueName: wallet-queue 
+            QueueName: !GetAtt WalletQueue.QueueName
         - SQSPollerPolicy:
-            QueueName: purchase-queue 
+            QueueName: !GetAtt PurchaseQueue.QueueName
             
         - SNSPublishMessagePolicy:
             TopicName: payment-topic 
@@ -79,7 +91,7 @@ Resources:
               Action:
                 - "sqs:SendMessage"
                 - "sqs:GetQueueUrl"
-              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:catalog-events-queue"
+              Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:${ReplyQueueName}"
          
         - VPCAccessPolicy: {}
   
@@ -88,13 +100,12 @@ Resources:
           ConnectionStrings__DefaultConnection: !Sub "Host=${RdsHost};Port=5432;Database=postgres;Username=postgres;Password=${RdsPassword}"
           AWS__Region: "sa-east-1"
           AWS__SnsTopicArn: !Ref SnsTopicArn
-          AWS__WalletCommandQueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/${WalletQueueArn}" 
-          AWS__PurchaseCommandQueueUrl: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/${PurchaseQueueArn}"
+          AWS__WalletCommandQueueUrl: !Ref WalletQueue
+          AWS__PurchaseCommandQueueUrl: !Ref PurchaseQueue
           AWS__ReplyQueueName: !Ref ReplyQueueName
 
 
           Serilog__Using__0: "Serilog.Sinks.Console"
-          Serilog__Using__1: "Serilog.Sinks.Elasticsearch"
           Serilog__Using__2: "Serilog.Enrichers.Environment"
           Serilog__Using__3: "Serilog.Enrichers.Thread"
           
@@ -102,17 +113,11 @@ Resources:
           Serilog__MinimumLevel__Override__Microsoft: "Warning"
 
           Serilog__WriteTo__0__Name: "Console"
-          Serilog__WriteTo__1__Name: "Elasticsearch"
-          Serilog__WriteTo__1__Args__nodeUris: !Ref ElasticUrl
-          Serilog__WriteTo__1__Args__indexFormat: "paymentservice-logs-{0:yyyy.MM.dd}"
-          Serilog__WriteTo__1__Args__autoRegisterTemplate: "true"
-          Serilog__WriteTo__1__Args__apiKey: !Ref ElasticApiKey
 
-          Elasticsearch__Uri: !Ref ElasticUrl # Parâmetro do template
-          Elasticsearch__Id: !Ref ElasticId # Parâmetro do template
-          Elasticsearch__ApiKey: !Ref ElasticApiKey # Parâmetro do template
-          APPLICATION_NAME: "PaymentService.Processor" # Nome estático da aplicação
+          APPLICATION_NAME: "PaymentService.Processor" 
 
           Serilog__Enrich__0: "FromLogContext"
           Serilog__Enrich__1: "WithMachineName"
           Serilog__Enrich__2: "WithThreadId"
+
+          Loki__Uri: !Ref LokiUrl

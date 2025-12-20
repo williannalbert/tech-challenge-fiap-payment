@@ -1,31 +1,71 @@
 version: '3.8'
 services:
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.2
-    container_name: payment-elasticsearch
+  postgres:
+    image: postgres:15-alpine
+    container_name: payment-postgres
     environment:
-      - "discovery.type=single-node"
-      - "xpack.security.enabled=false" 
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=payment_eventstore
     ports:
-      - "9200:9200"
+      - "5432:5432"
     volumes:
-      - esdata:/usr/share/elasticsearch/data
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.9.2
-    container_name: payment-kibana
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  localstack:
+    image: localstack/localstack
+    container_name: payment-localstack
     ports:
-      - "5601:5601"
+      - "4566:4566"            
     environment:
-      - "ELASTICSEARCH_HOSTS=http://elasticsearch:9200" 
-    depends_on:
-      - elasticsearch
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: payment-jaeger
+      - SERVICES=sqs,sns       
+      - DEFAULT_REGION=sa-east-1
+      - DEBUG=1
+    volumes:
+      - "./localstack_init:/etc/localstack/init/ready.d"
+      - "./localstack_init/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh"
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: payment-loki
     ports:
-      - "16686:16686"
-      - "4317:4317"
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+  grafana:
+    image: grafana/grafana:latest
+    container_name: payment-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - loki
+  tempo:
+    image: grafana/tempo:latest
+    container_name: payment-tempo
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./config/tempo-local.yaml:/etc/tempo.yaml
+    ports:
+      - "14268:14268" 
+      - "4317:4317"  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: payment-prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - loki
+      - tempo
  
 volumes:
-  esdata:
+  pgdata:

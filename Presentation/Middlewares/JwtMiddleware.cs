@@ -3,37 +3,34 @@ using System.Security.Claims;
 using Serilog.Context;
 
 namespace Presentation.Middlewares;
-
 /// <summary>
-/// Middleware híbrido que combina funcionalidades:
-/// 1. Enriquecimento de logs com contexto de requisição (como Identity)
-/// 2. Validação e autenticação JWT (como Games)
+/// Middleware que combina funcionalidades:
+/// 1. Enriquecimento de logs com contexto de requisição
+/// 2. Extração de informações do JWT (validação feita pelo Kong)
 /// 3. Suporte completo ao Kong Ingress Controller
 /// </summary>
-public class JwtMiddleware(
-    RequestDelegate next,
-    ILogger<JwtMiddleware> logger,
-    IConfiguration configuration
-)
+public class LogContextMiddleware(RequestDelegate next, ILogger<LogContextMiddleware> logger)
 {
     private readonly RequestDelegate _next = next;
-    private readonly ILogger<JwtMiddleware> _logger = logger;
+    private readonly ILogger<LogContextMiddleware> _logger = logger;
     private readonly JwtSecurityTokenHandler _tokenHandler = new();
-    private readonly string? _expectedIssuer = configuration["Jwt:Issuer"];
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // RequestId gerado pelo Kong
         var requestId =
             context.Request.Headers["X-Kong-Request-ID"].FirstOrDefault() ?? Guid.NewGuid()
                 .ToString("N")[..8];
 
+        // CorrelationId vindo do Kong ou do cliente
         var correlationId =
-            context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? context
-                .Request.Headers["X-Request-ID"]
-                .FirstOrDefault()
-            ?? Guid.NewGuid().ToString("N")[..12];
+            context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid()
+                .ToString("N")[..12];
 
-        var userInfo = TryExtractAndValidateUserInfo(context.Request);
+        // Garante que o correlationId seja devolvido ao client
+        context.Response.Headers["X-Correlation-ID"] = correlationId;
+
+        var userInfo = ExtractUserInfo(context.Request);
 
         using (LogContext.PushProperty("RequestId", requestId))
         using (LogContext.PushProperty("CorrelationId", correlationId))
@@ -72,9 +69,9 @@ public class JwtMiddleware(
     }
 
     /// <summary>
-    /// Extrai e VALIDA completamente o JWT (mais robusto que Identity)
+    /// Extrai informações do JWT (validação de assinatura, issuer e expiração é feita pelo Kong)
     /// </summary>
-    private UserInfo? TryExtractAndValidateUserInfo(HttpRequest request)
+    private UserInfo? ExtractUserInfo(HttpRequest request)
     {
         try
         {
@@ -90,33 +87,10 @@ public class JwtMiddleware(
             var token = authHeader["Bearer ".Length..].Trim();
             if (string.IsNullOrEmpty(token) || !_tokenHandler.CanReadToken(token))
             {
-                _logger.LogWarning("JWT com formato inválido");
                 return null;
             }
 
             var jwtToken = _tokenHandler.ReadJwtToken(token);
-
-            var issuer = jwtToken.Claims.FirstOrDefault(x => x.Type == "iss")?.Value;
-            if (!string.IsNullOrEmpty(_expectedIssuer) && issuer != _expectedIssuer)
-            {
-                _logger.LogDebug(
-                    "JWT issuer mismatch. Expected: {Expected}, Got: {Received}",
-                    _expectedIssuer,
-                    issuer
-                );
-                return null;
-            }
-
-            var exp = jwtToken.Claims.FirstOrDefault(x => x.Type == "exp")?.Value;
-            if (!string.IsNullOrEmpty(exp) && long.TryParse(exp, out var expTimestamp))
-            {
-                var expirationTime = DateTimeOffset.FromUnixTimeSeconds(expTimestamp);
-                if (expirationTime <= DateTimeOffset.UtcNow)
-                {
-                    _logger.LogDebug("JWT expired at {ExpirationTime}", expirationTime);
-                    return null;
-                }
-            }
 
             var userId = jwtToken.Claims.FirstOrDefault(x => x.Type == "sub")?.Value ?? "";
             var username =
@@ -139,7 +113,7 @@ public class JwtMiddleware(
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Não foi possível extrair/validar JWT");
+            _logger.LogDebug(ex, "Não foi possível extrair informações do JWT");
             return null;
         }
     }
@@ -208,7 +182,6 @@ public class JwtMiddleware(
             claims.Add(new(ClaimTypes.Email, userInfo.Email));
         }
 
-        // Adicionar roles
         foreach (var role in userInfo.Roles)
         {
             claims.Add(new(ClaimTypes.Role, role));
@@ -220,24 +193,27 @@ public class JwtMiddleware(
 }
 
 /// <summary>
-/// Informações do usuário
+/// Informações do usuário extraídas do JWT
 /// </summary>
 public class UserInfo
 {
-    public string UserId { get; set; } = "";
-    public string Username { get; set; } = "";
+    public string UserId { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
     public string? Email { get; set; }
-    public string SessionId { get; set; } = "";
-    public List<string> Roles { get; set; } = new();
+    public string SessionId { get; set; } = string.Empty;
+    public List<string> Roles { get; set; } = [];
     public bool IsAuthenticated { get; set; }
-    public string Token { get; set; } = "";
+    public string Token { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// Extensions para o middleware JWT
+/// Extensions para obter informações do usuário do contexto HTTP
 /// </summary>
-public static class EnhancedJwtExtensions
+public static class LogContextMiddlewareExtensions
 {
+    public static IApplicationBuilder UseLogContext(this IApplicationBuilder builder) =>
+        builder.UseMiddleware<LogContextMiddleware>();
+
     public static UserInfo? GetUserInfo(this HttpContext context) =>
         context.Items["UserInfo"] as UserInfo;
 
@@ -248,11 +224,16 @@ public static class EnhancedJwtExtensions
 
     public static string? GetUsername(this HttpContext context) => context.GetUserInfo()?.Username;
 
+    public static string? GetEmail(this HttpContext context) => context.GetUserInfo()?.Email;
+
     public static string? GetSessionId(this HttpContext context) =>
         context.GetUserInfo()?.SessionId;
 
     public static bool HasRole(this HttpContext context, string role) =>
         context.GetUserInfo()?.Roles?.Contains(role, StringComparer.OrdinalIgnoreCase) == true;
+
+    public static List<string> GetRoles(this HttpContext context) =>
+        context.GetUserInfo()?.Roles ?? [];
 
     public static string? GetToken(this HttpContext context) => context.GetUserInfo()?.Token;
 
@@ -263,15 +244,4 @@ public static class EnhancedJwtExtensions
 
     public static string? GetRequestId(this HttpContext context) =>
         context.Request.Headers["X-Kong-Request-ID"].FirstOrDefault();
-}
-
-/// <summary>
-/// Extension para registro do middleware
-/// </summary>
-public static class JwtMiddlewareExtensions
-{
-    public static IApplicationBuilder UseJwtMiddleware(this IApplicationBuilder builder)
-    {
-        return builder.UseMiddleware<JwtMiddleware>();
-    }
 }
