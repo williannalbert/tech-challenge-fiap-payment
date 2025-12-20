@@ -87,23 +87,49 @@ public class Function
     }
 
     private async Task ProcessMessageAsync(
-        SQSEvent.SQSMessage message,
-        IServiceProvider serviceProvider)
+     SQSEvent.SQSMessage message,
+     IServiceProvider serviceProvider)
     {
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         _logger.LogInformation("Processing message body: {MessageBody}", message.Body);
 
+        string? commandType = null;
+        string? payload = null;
+
         try
         {
-            var envelope = JsonSerializer.Deserialize<CommandEnvelope>(message.Body, options);
-            var commandType = envelope?.CommandType;
-            var payload = envelope?.Payload?.GetRawText();
+            int jsonStartIndex = message.Body.IndexOf('{');
+
+            if (jsonStartIndex > 0)
+            {
+                var rawType = message.Body.Substring(0, jsonStartIndex).Trim();
+
+                payload = message.Body.Substring(jsonStartIndex);
+
+                commandType = rawType switch
+                {
+                    "wallet.command.deposit" => "create-deposit",
+                    "wallet.command.withdraw" => "create-withdraw", 
+                    "wallet.command.purchase" => "create-purchase", 
+                    "wallet.command.refund" => "create-refund",   
+                    _ => rawType 
+                };
+
+                _logger.LogInformation("Message parsed manually. RawType: {RawType} mapped to CommandType: {CommandType}", rawType, commandType);
+            }
+            else
+            {
+                var envelope = JsonSerializer.Deserialize<CommandEnvelope>(message.Body, options);
+                commandType = envelope?.CommandType;
+                payload = envelope?.Payload?.GetRawText();
+            }
 
             if (string.IsNullOrEmpty(commandType) || string.IsNullOrEmpty(payload))
             {
-                _logger.LogWarning("Invalid message format. Discarding message.");
+                _logger.LogWarning("Invalid message format (CommandType or Payload missing). Discarding message.");
                 return;
             }
+
             object? result = null;
             var policy = ResiliencePolicy.GetPostgresPolicy(_logger);
 
@@ -140,11 +166,11 @@ public class Function
                         break;
                 }
             });
-            
+
             if (result != null && (commandType == "create-purchase" || commandType == "create-refund"))
             {
                 var sqsClient = serviceProvider.GetRequiredService<IAmazonSQS>();
-                var replyQueueName = _configuration["AWS:ReplyQueueName"];
+                var replyQueueName = _configuration?["AWS:ReplyQueueName"];
 
                 if (string.IsNullOrWhiteSpace(replyQueueName))
                 {
@@ -164,8 +190,8 @@ public class Function
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Error processing message: {ex.Message}");
-            throw;
+            _logger.LogError(ex, "Error processing message: {Message}", ex.Message);
+            throw; 
         }
     }
 
