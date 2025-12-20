@@ -30,7 +30,6 @@ data:
   Serilog__Enrich__0: "FromLogContext"
   Serilog__Enrich__1: "WithMachineName"
   Serilog__WriteTo__0__Name: "Console"
-  Serilog__WriteTo__1__Args__endpoint: "http://otel-collector.identity-system.svc.cluster.local:4317/"
 
   # Loki__Uri: "http://loki-stack.monitoring:3100"
   # Otlp__Endpoint: "http://tempo.monitoring:4317"
