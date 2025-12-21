@@ -21,7 +21,6 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
-      serviceAccountName: payment-api-sa
       containers:
       - name: payment-api
         image: 208452488125.dkr.ecr.sa-east-1.amazonaws.com/payment-service-api:latest
