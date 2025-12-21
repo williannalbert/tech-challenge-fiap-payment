@@ -83,6 +83,7 @@ jobs:
           
           # Aplicar manifests em ordem
           kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/service-account.yaml
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secrets.yaml
           kubectl apply -f k8s/kong-plugins.yaml
