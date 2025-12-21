@@ -97,6 +97,7 @@ Resources:
   
       Environment:
         Variables:
+          ASPNETCORE_ENVIRONMENT: "Production"
           ConnectionStrings__DefaultConnection: !Sub "Host=${RdsHost};Port=5432;Database=postgres;Username=postgres;Password=${RdsPassword}"
           AWS__Region: "sa-east-1"
           AWS__SnsTopicArn: !Ref SnsTopicArn
