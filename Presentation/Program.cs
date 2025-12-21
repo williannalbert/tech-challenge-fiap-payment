@@ -23,8 +23,8 @@ using System.Text.Json;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-var otlpEndpoint = builder.Configuration["Otlp__Endpoint"] ?? "http://localhost:4317";
-var lokiUri = builder.Configuration["Loki__Uri"] ?? "http://localhost:3100";
+var otlpEndpoint = builder.Configuration["Otlp:Endpoint"] ?? "http://otel-collector-service.identity-system:4317";
+var lokiUri = builder.Configuration["Loki:Uri"] ?? "http://loki-service.identity-system:3100";
 
 var awsOptions = builder.Configuration.GetAWSOptions();
 builder.Services.AddDefaultAWSOptions(awsOptions);
@@ -33,8 +33,7 @@ builder.Services.AddDbContext<EventStoreDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource.AddService(
-        serviceName: "PaymentService"))
+    .ConfigureResource(resource => resource.AddService("PaymentService.Api")) 
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
@@ -44,11 +43,12 @@ builder.Services.AddOpenTelemetry()
         .AddOtlpExporter(otlpOptions =>
         {
             otlpOptions.Endpoint = new Uri(otlpEndpoint);
+            otlpOptions.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc; 
         }))
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
-        .AddPrometheusExporter() 
+        .AddPrometheusExporter()
     );
 
 
@@ -58,20 +58,21 @@ Log.Logger = new LoggerConfiguration()
         .Build())
     .CreateBootstrapLogger();
 
-builder.Host.UseSerilog(
-    (context, services, configuration) =>
-        configuration
-            .ReadFrom.Configuration(context.Configuration)
-            .ReadFrom.Services(services)
-            .Enrich.FromLogContext()
-            .Enrich.WithMachineName()
-            .Enrich.WithProperty("X-Correlation-ID", context.HostingEnvironment.ApplicationName)
-            .WriteTo.Console()
-            .WriteTo.GrafanaLoki(
-                lokiUri,
-                labels: new[] { new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "app", Value = "payment-api" } }
-            )
-        );
+builder.Host.UseSerilog((context, services, configuration) =>
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "PaymentService.Api") 
+        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
+        .WriteTo.Console()
+        .WriteTo.GrafanaLoki(
+            lokiUri,
+            labels: new[] {
+                new LokiLabel { Key = "app", Value = "payment-api" },
+                new LokiLabel { Key = "env", Value = context.HostingEnvironment.EnvironmentName }
+            })
+);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
