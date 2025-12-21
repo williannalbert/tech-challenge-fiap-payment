@@ -87,6 +87,7 @@ jobs:
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secrets.yaml
           kubectl apply -f k8s/kong-plugins.yaml
+          kubectl apply -f k8s/postgres-exporter.yaml
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml
           kubectl apply -f k8s/ingress.yaml
